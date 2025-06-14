@@ -233,7 +233,7 @@ def ensure_portrait(image_path):
 if st.session_state.page == "Home":
     st.title("Smart Wardrobe")
 
-    # User input
+    # User input with validation
     user = st.text_input("Enter your name:", st.session_state.get('user', ""))
     option = st.text_input("Enter your Occasion:", st.session_state.get('option', ""))
     dataset_path = os.path.join(root, "categories.csv")
@@ -242,16 +242,22 @@ if st.session_state.page == "Home":
     button = st.button("Submit")
 
     if button:
-        user_path = os.path.join(root, user)
-        option_path = os.path.join(user_path, option)
-        os.makedirs(option_path, exist_ok=True)
+        # Validate inputs
+        if not user.strip():
+            st.error("Please enter your name")
+        elif not option.strip():
+            st.error("Please enter an occasion")
+        else:
+            user_path = os.path.join(root, user)
+            option_path = os.path.join(user_path, option)
+            os.makedirs(option_path, exist_ok=True)
 
-        input_item = option
-        category = classify_category(input_item, dataset_path)
-        st.session_state.user = user
-        st.session_state.option = option
-        st.session_state.category = category
-        navigate_to("Recommendations")
+            input_item = option
+            category = classify_category(input_item, dataset_path)
+            st.session_state.user = user
+            st.session_state.option = option
+            st.session_state.category = category
+            navigate_to("Recommendations")
 
 elif st.session_state.page == "Recommendations":
     st.title("Recommendations")
