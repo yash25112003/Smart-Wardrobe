@@ -11,6 +11,7 @@ from tensorflow.keras.layers import GlobalMaxPooling2D
 from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
 from sklearn.neighbors import NearestNeighbors
 from numpy.linalg import norm
+from scipy import spatial  # Add this import for distance calculations
 
 # Set page configuration
 st.set_page_config(page_title="Smart Wardrobe", page_icon=":shirt:", layout="wide")
@@ -182,11 +183,27 @@ def extract_features(img_path, model):
         expanded_img_array = np.expand_dims(img_array, axis=0)
         preprocessed_img = preprocess_input(expanded_img_array)
         result = model.predict(preprocessed_img, verbose=0).flatten()
-        normalized_result = result / norm(result)
+        
+        # Apply feature importance weighting
+        feature_weights = np.linspace(1.0, 0.5, len(result))  # Higher weight to initial features
+        weighted_result = result * feature_weights
+        
+        # L2 normalization
+        normalized_result = weighted_result / np.sqrt(np.sum(weighted_result**2))
         return normalized_result
     except Exception as e:
         st.error(f"Error extracting features from {os.path.basename(img_path)}: {str(e)}")
         return None
+
+# Function to calculate confidence scores
+def calculate_confidence(features, recommended_features):
+    cosine_similarity = 1 - spatial.distance.cosine(features, recommended_features)
+    euclidean_distance = spatial.distance.euclidean(features, recommended_features)
+    normalized_euclidean = 1 / (1 + euclidean_distance)  # Convert to similarity score
+    
+    # Combine scores with weights
+    confidence = (0.7 * cosine_similarity + 0.3 * normalized_euclidean) * 100
+    return min(100, max(0, confidence))  # Ensure score is between 0 and 100
 
 # Function to recommend items
 def recommend(features, feature_list, k):
@@ -201,11 +218,34 @@ def recommend(features, feature_list, k):
         
         if k > len(feature_list):
             k = len(feature_list)
-            
-        neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute', metric='euclidean')
-        neighbors.fit(feature_list)
-        distances, indices = neighbors.kneighbors([features])
-        return indices
+        
+        # Compute multiple distance metrics
+        cosine_neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute', metric='cosine')
+        euclidean_neighbors = NearestNeighbors(n_neighbors=k, algorithm='brute', metric='euclidean')
+        
+        cosine_neighbors.fit(feature_list)
+        euclidean_neighbors.fit(feature_list)
+        
+        # Get recommendations using both metrics
+        cosine_distances, cosine_indices = cosine_neighbors.kneighbors([features])
+        euclidean_distances, euclidean_indices = euclidean_neighbors.kneighbors([features])
+        
+        # Combine and weight the results
+        combined_indices = []
+        seen_indices = set()
+        
+        # Prioritize items that appear in both metrics
+        for c_idx, e_idx in zip(cosine_indices[0], euclidean_indices[0]):
+            if c_idx not in seen_indices:
+                combined_indices.append(c_idx)
+                seen_indices.add(c_idx)
+            if e_idx not in seen_indices:
+                combined_indices.append(e_idx)
+                seen_indices.add(e_idx)
+        
+        # Return top k recommendations
+        return np.array([combined_indices[:k]])
+        
     except Exception as e:
         st.error(f"Error in recommendation: {str(e)}")
         return None
@@ -333,15 +373,22 @@ elif st.session_state.page == "Recommendations":
                         st.success(f"Here are your recommendations!")
                         columns = st.columns(k)
                         
-                        # Show recommendations with controlled image size
+                        # Show recommendations with confidence scores
                         for i in range(k):
                             with columns[i]:
                                 if i < recommendation_indices.shape[1]:
                                     img = ensure_portrait(filenames[recommendation_indices[0][i]])
-                                    # Resize image to a reasonable width while maintaining aspect ratio
+                                    # Calculate confidence score
+                                    confidence = calculate_confidence(
+                                        feature_list[0], 
+                                        feature_list[recommendation_indices[0][i]]
+                                    )
+                                    
+                                    # Resize image
                                     img = img.resize((300, int(300 * img.size[1] / img.size[0])))
-                                    st.image(img,
-                                           caption=f"Recommendation {i+1}")
+                                    st.image(img)
+                                    st.caption(f"Recommendation {i+1}")
+                                    print("Confidence: {confidence:.1f}%\n")
                     else:
                         st.error("Could not generate recommendations")
                 else:
