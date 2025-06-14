@@ -111,29 +111,39 @@ if st.session_state.sidebar_visible:
         if st.sidebar.button(page):
             navigate_to(page)
 
+# Get the directory where the script is located and set up paths
+script_dir = os.path.dirname(os.path.abspath(__file__))
+users_dir = os.path.join(script_dir, 'users')  # Create a dedicated users directory
+os.makedirs(users_dir, exist_ok=True)  # Ensure users directory exists
+
 # Function to classify category
 def classify_category(input_item, df):
-    df = pd.read_csv('categories.csv')
-    default_var = 'casual'
-    matching_items = df.loc[df['items'].str.lower() == input_item.lower(), 'category']
-    if not matching_items.empty:
-        category_name = matching_items.iloc[0]
-        return category_name
-    else:
+    try:
+        csv_path = os.path.join(script_dir, 'categories.csv')
+        df = pd.read_csv(csv_path)
+        default_var = 'casual'
+        matching_items = df.loc[df['items'].str.lower() == input_item.lower(), 'category']
+        if not matching_items.empty:
+            category_name = matching_items.iloc[0]
+            return category_name
+        else:
+            return default_var
+    except Exception as e:
+        st.error(f"Error reading categories file: {str(e)}")
         return default_var
 
 # Function to save uploaded file
 def save_uploaded_file(uploaded_file, user, option):
     try:
         # Create directories if they don't exist
-        user_path = os.path.join(root, user)
+        user_path = os.path.join(users_dir, user)  # Changed from root to users_dir
         option_path = os.path.join(user_path, option)
         os.makedirs(option_path, exist_ok=True)
         
         save_path = os.path.join(option_path, uploaded_file.name)
         with open(save_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
-        return print("{uploaded_file.name} saved successfully.")
+        return f"{uploaded_file.name} saved successfully."  # Fixed string formatting
     except PermissionError as e:
         st.error(f"Permission error: {e}")
         return None
@@ -200,8 +210,6 @@ def recommend(features, feature_list, k):
         st.error(f"Error in recommendation: {str(e)}")
         return None
 
-root = "/Users/ShahYash/Documents/smart_wardrobe1"
-
 # Function to ensure image orientation is portrait
 def ensure_portrait(image_path):
     try:
@@ -229,6 +237,14 @@ def ensure_portrait(image_path):
         st.error(f"Error processing image orientation: {e}")
         return Image.open(image_path)  # Return original image if processing fails
 
+# Function to reset and go to home
+def reset_and_go_home():
+    # Clear all session state except sidebar visibility
+    sidebar_visible = st.session_state.sidebar_visible
+    st.session_state.clear()
+    st.session_state.sidebar_visible = sidebar_visible
+    st.session_state.page = "Home"
+
 # Main logic for each page
 if st.session_state.page == "Home":
     st.title("Smart Wardrobe")
@@ -236,9 +252,7 @@ if st.session_state.page == "Home":
     # User input with validation
     user = st.text_input("Enter your name:", st.session_state.get('user', ""))
     option = st.text_input("Enter your Occasion:", st.session_state.get('option', ""))
-    dataset_path = os.path.join(root, "categories.csv")
-    dataset = pd.read_csv(dataset_path)
-
+    
     button = st.button("Submit")
 
     if button:
@@ -248,12 +262,12 @@ if st.session_state.page == "Home":
         elif not option.strip():
             st.error("Please enter an occasion")
         else:
-            user_path = os.path.join(root, user)
+            user_path = os.path.join(users_dir, user)  # Changed from root to users_dir
             option_path = os.path.join(user_path, option)
             os.makedirs(option_path, exist_ok=True)
 
             input_item = option
-            category = classify_category(input_item, dataset_path)
+            category = classify_category(input_item, None)  # Remove unused df parameter
             st.session_state.user = user
             st.session_state.option = option
             st.session_state.category = category
@@ -286,7 +300,7 @@ elif st.session_state.page == "Recommendations":
                     st.success(save_result)
                     
             # Extract features from saved files
-            user_option_path = os.path.join(root, st.session_state.user, st.session_state.option)
+            user_option_path = os.path.join(users_dir, st.session_state.user, st.session_state.option)  # Changed from root to users_dir
             if os.path.isdir(user_option_path):
                 st.info(f"Processing images")
                 for file in os.listdir(user_option_path):
@@ -305,7 +319,7 @@ elif st.session_state.page == "Recommendations":
                 st.success(f"Successfully processed {len(feature_list)} images")
 
                 # Save features and filenames
-                user_directory = os.path.join(root, st.session_state.user)
+                user_directory = os.path.join(users_dir, st.session_state.user)
                 os.makedirs(user_directory, exist_ok=True)
 
                 # Determine number of recommendations
@@ -338,46 +352,92 @@ elif st.session_state.page == "Recommendations":
 
 # Feedback page
 elif st.session_state.page == "Feedback":
-    st.title('Did you find us helpful')
-
+    st.title('How was your experience?')
+    
     def star_rating(rating):
-        df = pd.read_csv("/Users/ShahYash/Documents/smart_wardrobe1/referral_links.csv")
         if 'category' not in st.session_state:
-            st.error("No category found. Please go back and complete the previous steps.")
-            return
-
-        if rating == 0 or rating >= 4:
-            matching_rows = df.loc[df['category'].str.lower() == st.session_state.category.lower()]
-
-            if not matching_rows.empty:
-                random_row = matching_rows.sample(n=1).iloc[0]
-                amazon = random_row['amazon']
-                ajio = random_row['ajio']
-                myntra = random_row['myntra']
-
-                st.markdown(f"[Amazon]({amazon})")
-                st.markdown(f"[Ajio]({ajio})")
-                st.markdown(f"[Myntra]({myntra})")
-            else:
-                st.error("No matching category found.")
-        elif rating in [1, 2, 3]:
-            user_categoryselection = st.text_input("Please specify a category:")
-            matching_rows = df.loc[df['items'].str.lower() == user_categoryselection.lower()]
-
-            if not matching_rows.empty:
-                random_row = matching_rows.sample(n=1).iloc[0]
-                amazon = random_row['amazon']
-                ajio = random_row['ajio']
-                myntra = random_row['myntra']
-
-                st.markdown(f"[Amazon]({amazon})")
-                st.markdown(f"[Ajio]({ajio})")
-                st.markdown(f"[Myntra]({myntra})")
-            else:
-                st.error("No matching category found.")
-        else:
-            st.write("Rate us higher to get referral links!")
+            st.warning("⚠️ No recommendations were generated. Please complete the previous steps first.")
+            return '⭐' * int(rating)
+            
+        try:
+            csv_path = os.path.join(script_dir, 'referral_links.csv')
+            df = pd.read_csv(csv_path)
+            
+            # Show different messages based on rating
+            if rating == 0:
+                st.info("Please rate your experience to get personalized shopping recommendations!")
+            elif rating >= 4:
+                st.success("Thank you for your positive feedback! 🎉")
+                st.write("Here are some shopping recommendations based on your preferences:")
+                
+                matching_rows = df.loc[df['category'].str.lower() == st.session_state.category.lower()]
+                if not matching_rows.empty:
+                    random_row = matching_rows.sample(n=1).iloc[0]
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if random_row['amazon']:
+                            st.markdown(f"[![Amazon](https://img.icons8.com/color/48/000000/amazon.png)]({random_row['amazon']})")
+                            st.markdown(f"[Shop on Amazon]({random_row['amazon']})")
+                    with col2:
+                        if random_row['ajio']:
+                            st.markdown(f"[![Ajio](https://img.icons8.com/color/48/000000/shopping-bag.png)]({random_row['ajio']})")
+                            st.markdown(f"[Shop on Ajio]({random_row['ajio']})")
+                    with col3:
+                        if random_row['myntra']:
+                            st.markdown(f"[![Myntra](https://img.icons8.com/color/48/000000/shopping-cart.png)]({random_row['myntra']})")
+                            st.markdown(f"[Shop on Myntra]({random_row['myntra']})")
+                else:
+                    st.info("We'll add more shopping recommendations for this category soon!")
+                    
+            elif rating in [1, 2, 3]:
+                st.write("We're sorry your experience wasn't perfect. Help us improve!")
+                user_categoryselection = st.text_input("What category were you looking for?")
+                
+                if user_categoryselection.strip():
+                    matching_rows = df.loc[df['items'].str.lower() == user_categoryselection.lower()]
+                    if not matching_rows.empty:
+                        st.success("Here are some alternative recommendations:")
+                        random_row = matching_rows.sample(n=1).iloc[0]
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            if random_row['amazon']:
+                                st.markdown(f"[![Amazon](https://img.icons8.com/color/48/000000/amazon.png)]({random_row['amazon']})")
+                                st.markdown(f"[Shop on Amazon]({random_row['amazon']})")
+                        with col2:
+                            if random_row['ajio']:
+                                st.markdown(f"[![Ajio](https://img.icons8.com/color/48/000000/shopping-bag.png)]({random_row['ajio']})")
+                                st.markdown(f"[Shop on Ajio]({random_row['ajio']})")
+                        with col3:
+                            if random_row['myntra']:
+                                st.markdown(f"[![Myntra](https://img.icons8.com/color/48/000000/shopping-cart.png)]({random_row['myntra']})")
+                                st.markdown(f"[Shop on Myntra]({random_row['myntra']})")
+                    else:
+                        st.info("We'll add recommendations for this category in the future!")
+                        
+            # Add feedback text area and home button for all ratings except 0
+            if rating > 0:
+                feedback_text = st.text_area("Any additional feedback for us?", 
+                                          placeholder="Your feedback helps us improve!")
+                
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    if st.button("Submit Feedback"):
+                        if not feedback_text.strip():
+                            st.error("Please provide some feedback before submitting")
+                        else:
+                            st.success("Thank you for your feedback! 🙏")
+                            st.session_state.feedback_submitted = True
+            
+                # Only show Go to Home button after rating is given
+                with col2:
+                    if st.button("🏠 Start Over", type="primary"):
+                        reset_and_go_home()
+                    
+        except Exception as e:
+            st.error(f"An error occurred while processing your feedback. Please try again.")
+            
         return '⭐' * int(rating)
 
-    rating = st.slider("Rate us:", 0, 5, value=0)
-    st.write(f"You rated us: {star_rating(rating)}")
+    rating = st.slider("Rate your experience:", min_value=0, max_value=5, value=0, 
+                      help="Drag the slider to rate your experience")
+    st.write(f"Your rating: {star_rating(rating)}")
