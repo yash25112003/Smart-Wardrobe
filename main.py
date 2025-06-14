@@ -1,17 +1,16 @@
 import os
-import numpy as np
-import pandas as pd
-import streamlit as st
-from PIL import Image
-import pickle
-from tqdm import tqdm
-import tensorflow as tf
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.layers import GlobalMaxPooling2D
-from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
-from sklearn.neighbors import NearestNeighbors
-from numpy.linalg import norm
-from scipy import spatial  # Add this import for distance calculations
+import numpy as np # type: ignore
+import pandas as pd # type: ignore
+import streamlit as st # type: ignore
+from PIL import Image  # type: ignore
+from tqdm import tqdm # type: ignore
+import tensorflow as tf # type: ignore
+from tensorflow.keras.preprocessing import image # type: ignore
+from tensorflow.keras.layers import GlobalMaxPooling2D # type: ignore
+from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input # type: ignore
+from sklearn.neighbors import NearestNeighbors # type: ignore
+from numpy.linalg import norm # type: ignore
+from scipy import spatial  # type: ignore # Add this import for distance calculations
 
 # Set page configuration
 st.set_page_config(page_title="Smart Wardrobe", page_icon=":shirt:", layout="wide")
